@@ -1,0 +1,15 @@
+{
+  "name": "signalk-pushover-plugin",
+  "version": "0.0.1",
+  "main": "index.js",
+  "author": "Jonas Witt <mail@jonaswitt.com>",
+  "license": "MIT",
+  "keywords": [
+    "signalk-node-server-plugin",
+    "signalk-category-notifications"
+  ],
+  "devDependencies": {
+    "@signalk/server-api": "^2.4.0"
+  },
+  "repository": "github:jonaswitt/signalk-pushover-plugin"
+}
