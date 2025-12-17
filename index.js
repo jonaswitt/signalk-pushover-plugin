@@ -33,6 +33,7 @@ module.exports = (
     let anchorStatusTimeout;
     let anchorStatusInterval;
     let positionUpdateTimeout;
+    let started = false;
 
     const getStatusText = () => {
         const currentRadius = getLastValueAsNumber("navigation.anchor.currentRadius", 60);
@@ -43,31 +44,43 @@ module.exports = (
         return `${currentRadius?.toFixed(0) ?? '?'}/${maxRadius?.toFixed(0) ?? '?'} m @ ${bearingTrue != null ? (bearingTrue * 180 / Math.PI).toFixed(0) : '?'} deg${depthBelowSurface != null ? `, depth ${depthBelowSurface?.toFixed(1) ?? '?'} m` : ''}`
     };
 
+    let settings;
+    const sendPush = async (options = {}) => {
+        if (settings?.pushover_user == null) {
+            app.error('Pushover user not set');
+            throw new Error('Pushover user not set');
+        }
+        const body = {
+            token: 'a5q57vtxjqzz56qo6gnnbmj6omyip7',
+            user: settings.pushover_user,
+            title: 'Anchor Alarm',
+            ...options,
+        }
+        const res = await fetch('https://api.pushover.net/1/messages.json', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: new URLSearchParams(body).toString()
+        });
+        if (!res.ok) {
+            app.error(`Failed to send push notification ${JSON.stringify(options)}: HTTP ${res.status} ${res.statusText}`);
+            app.error(`Request: ${new URLSearchParams(body).toString()}`);
+            app.error(`Response: ${await res.text()}`);
+            throw new Error(`Failed to send push notification: HTTP ${res.status} ${res.statusText}`);
+        } else {
+            const resBody = await res.json();
+            app.debug(`Push notification ${JSON.stringify(options)} sent: ${JSON.stringify(resBody)}`);
+        }
+    }
+
     /** @type {Plugin} */
     const plugin = {
         id: "signalk-pushover-plugin",
         name: "Anchor Alarm (Pushover push notifications)",
-        start: (settings, restartPlugin) => {
-            const sendPush = async (options = {}) => {
-                const res = await fetch('https://api.pushover.net/1/messages.json', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: new URLSearchParams({
-                        token: 'a5q57vtxjqzz56qo6gnnbmj6omyip7',
-                        user: settings.pushover_user,
-                        title: 'Anchor Alarm',
-                        ...options,
-                    }).toString()
-                });
-                if (!res.ok) {
-                    app.error(`Failed to send push notification ${JSON.stringify(options)}: HTTP ${res.status} ${res.statusText}`);
-                } else {
-                    const resBody = await res.json();
-                    app.debug(`Push notification ${JSON.stringify(options)} sent: ${JSON.stringify(resBody)}`);
-                }
-            }
+        start: (startSettings, restartPlugin) => {
+            started = true;
+            settings = startSettings;
 
             const setPositionUpdateTimeout = () => {
                 if (positionUpdateTimeout != null) {
@@ -222,6 +235,8 @@ module.exports = (
             );
         },
         stop: () => {
+            started = false;
+
             if (anchorStatusTimeout != null) {
                 clearTimeout(anchorStatusTimeout);
                 anchorStatusTimeout = undefined;
@@ -237,6 +252,30 @@ module.exports = (
 
             unsubscribes?.forEach(f => f());
             unsubscribes = [];
+        },
+        registerWithRouter: (router) => {
+            // GET http://192.168.2.11:3001/plugins/signalk-pushover-plugin/status
+            router.get('/status', (req, res) => {
+                res.json({
+                    started,
+                    values: lastValues,
+                });
+            });
+            router.post('/test', (req, res) => {
+                sendPush({
+                    message: `TEST ${getStatusText()}`,
+                    ttl: 60,
+                }).then(() => {
+                    res.json({
+                        sent: true
+                    });
+                }).catch((err) => {
+                    res.status(500).json({
+                        sent: false,
+                        error: err.message,
+                    });
+                });
+            });
         },
         schema: () => ({
             properties: {
