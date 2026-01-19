@@ -93,9 +93,14 @@ function App() {
         allValues["notifications.navigation.anchor"]?.value !== undefined ||
         allValues["navigation.anchor.currentRadius"]?.value !== undefined;
     const isStateOld =
-        allValues["notifications.navigation.anchor"]?.timestamp == null ||
-        Date.now() - allValues["notifications.navigation.anchor"]?.timestamp >
-            1000 * 60;
+        (allValues["notifications.navigation.anchor"]?.timestamp == null ||
+            Date.now() -
+                allValues["notifications.navigation.anchor"]?.timestamp >
+                1000 * 60) &&
+        (allValues["navigation.anchor.currentRadius"]?.timestamp == null ||
+            Date.now() -
+                allValues["navigation.anchor.currentRadius"]?.timestamp >
+                1000 * 60);
 
     const alarmState =
         (
