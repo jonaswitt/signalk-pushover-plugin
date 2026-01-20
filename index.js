@@ -1,3 +1,5 @@
+const { exec } = require('child_process');
+
 /**
  * @typedef {import('@signalk/server-api').ServerAPI} ServerAPI
  * @typedef {import('@signalk/server-api').Plugin} Plugin
@@ -74,6 +76,20 @@ module.exports = (
         }
     }
 
+    const runCmd = (cmd) => {
+        if (!cmd.trim().length) {
+            return;
+        }
+        app.debug(`Executing command: ${cmd}`);
+        exec(cmd, (error, stdout, stderr) => {
+            if (error) {
+                app.error(`Error executing command "${cmd}": ${error.message}`);
+            }
+        });
+    }
+
+    let draggingCmdInterval;
+
     /** @type {Plugin} */
     const plugin = {
         id: "signalk-pushover-plugin",
@@ -111,6 +127,7 @@ module.exports = (
                             message: `OK ${getStatusText()}`,
                             ttl: settings.anchor_ok_update_interval * 1000,
                         });
+                        runCmd(settings.anchor_ok_cmd);
                     } else {
                         // Anchor is not set
                     }
@@ -165,6 +182,7 @@ module.exports = (
                                                 message: `Anchor Raised`,
                                                 ttl: 60,
                                             });
+                                            runCmd(settings.anchor_raised_cmd);
                                         }, 1000);
                                     } else if (value != null && oldValue === null) {
                                         // Anchor dropped
@@ -173,6 +191,7 @@ module.exports = (
                                                 message: `Anchor Dropped ${getStatusText()}`,
                                                 ttl: 60,
                                             });
+                                            runCmd(settings.anchor_set_cmd);
                                         }, 1000);
                                     }
                                     break;
@@ -195,11 +214,23 @@ module.exports = (
                                                 retry: 30,
                                                 expire: 600,
                                             });
+                                            runCmd(settings.anchor_dragging_cmd);
+                                            if (draggingCmdInterval != null) {
+                                                clearInterval(draggingCmdInterval);
+                                            }
+                                            draggingCmdInterval = setInterval(() => {
+                                                runCmd(settings.anchor_dragging_cmd);
+                                            }, 10 * 1000);
                                         } else if (newState === "normal") {
+                                            if (draggingCmdInterval != null) {
+                                                clearInterval(draggingCmdInterval);
+                                                draggingCmdInterval = undefined;
+                                            }
                                             sendPush({
                                                 message: `Anchor OK ${getStatusText()}`,
                                                 ttl: 60,
                                             });
+                                            runCmd(settings.anchor_ok_cmd);
                                         }
                                     }
                                     break;
@@ -275,6 +306,12 @@ module.exports = (
                         error: err.message,
                     });
                 });
+                const notification = getLastValue("notifications.navigation.anchor")?.state ?? "normal";
+                if (notification === "emergency" || notification === "alarm") {
+                    runCmd(settings.anchor_dragging_cmd);
+                } else if (notification === "normal") {
+                    runCmd(settings.anchor_ok_cmd);
+                }
             });
         },
         schema: () => ({
@@ -292,6 +329,26 @@ module.exports = (
                     type: 'number',
                     title: 'Timeout in seconds after which to send alert if no position update received (0 to disable)',
                     default: 60
+                },
+                anchor_dragging_cmd: {
+                    type: 'string',
+                    title: 'Command to execute when anchor dragging is detected',
+                },
+                anchor_set_cmd: {
+                    type: 'string',
+                    title: 'Command to execute when anchor is set',
+                },
+                anchor_raised_cmd: {
+                    type: 'string',
+                    title: 'Command to execute when anchor is raised',
+                },
+                anchor_ok_cmd: {
+                    type: 'string',
+                    title: 'Command to execute when anchor status is OK',
+                },
+                gps_lost_cmd: {
+                    type: 'string',
+                    title: 'Command to execute when GPS position updates are lost',
                 },
             },
         }),
