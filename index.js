@@ -1,5 +1,10 @@
 const { exec } = require('child_process');
 
+const PUSHOVER_TOKEN = 'a5q57vtxjqzz56qo6gnnbmj6omyip7';
+
+const PUSHOVER_ANCHOR_TAG = 'anchor-alarm';
+const PUSHOVER_DEPTH_TAG = 'depth-alarm';
+
 /**
  * @typedef {import('@signalk/server-api').ServerAPI} ServerAPI
  * @typedef {import('@signalk/server-api').Plugin} Plugin
@@ -47,32 +52,47 @@ module.exports = (
     };
 
     let settings;
-    const sendPush = async (options = {}) => {
+    const fetchPushoverApiRequest = async (url, body = {}) => {
         if (settings?.pushover_user == null) {
             app.error('Pushover user not set');
             throw new Error('Pushover user not set');
         }
-        const body = {
-            token: 'a5q57vtxjqzz56qo6gnnbmj6omyip7',
-            user: settings.pushover_user,
-            title: 'Anchor Alarm',
-            ...options,
-        }
-        const res = await fetch('https://api.pushover.net/1/messages.json', {
+        return fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: new URLSearchParams(body).toString()
+            body: new URLSearchParams({
+                token: PUSHOVER_TOKEN,
+                user: settings.pushover_user,
+                ...body,
+            }).toString()
+        });
+    }
+
+    const sendPush = async (options = {}) => {
+        const res = await fetchPushoverApiRequest('https://api.pushover.net/1/messages.json', {
+            title: 'Anchor Alarm',
+            ...options,
         });
         if (!res.ok) {
             app.error(`Failed to send push notification ${JSON.stringify(options)}: HTTP ${res.status} ${res.statusText}`);
-            app.error(`Request: ${new URLSearchParams(body).toString()}`);
             app.error(`Response: ${await res.text()}`);
             throw new Error(`Failed to send push notification: HTTP ${res.status} ${res.statusText}`);
         } else {
             const resBody = await res.json();
             app.debug(`Push notification ${JSON.stringify(options)} sent: ${JSON.stringify(resBody)}`);
+        }
+    }
+
+    const cancelAllEmergencyReceipts = async (tag) => {
+        const res = await fetchPushoverApiRequest(`https://api.pushover.net/1/receipts/cancel_by_tag/${tag}.json`);
+        if (!res.ok) {
+            app.error(`Failed to cancel emergency receipts: HTTP ${res.status} ${res.statusText}`);
+            app.error(`Response: ${await res.text()}`);
+            throw new Error(`Failed to cancel emergency receipts: HTTP ${res.status} ${res.statusText}`);
+        } else {
+            app.debug(`Cancelled emergency receipts with tag "${tag}"`);
         }
     }
 
@@ -213,6 +233,7 @@ module.exports = (
                                                 priority: newState === "emergency" ? 2 : 1,
                                                 retry: 30,
                                                 expire: 600,
+                                                tags: PUSHOVER_ANCHOR_TAG,
                                             });
                                             runCmd(settings.anchor_dragging_cmd);
                                             if (draggingCmdInterval != null) {
@@ -231,6 +252,8 @@ module.exports = (
                                                 ttl: 60,
                                             });
                                             runCmd(settings.anchor_ok_cmd);
+
+                                            cancelAllEmergencyReceipts(PUSHOVER_ANCHOR_TAG).catch(() => { });
                                         }
                                     }
                                     break;
@@ -246,12 +269,15 @@ module.exports = (
                                                 priority: newState === "emergency" ? 2 : 1,
                                                 retry: 30,
                                                 expire: 600,
+                                                tags: PUSHOVER_DEPTH_TAG,
                                             });
                                         } else if (newState === "normal") {
                                             sendPush({
                                                 message: `DEPTH OK ${getStatusText()}`,
                                                 ttl: 60,
                                             });
+
+                                            cancelAllEmergencyReceipts(PUSHOVER_DEPTH_TAG).catch(() => { });
                                         }
                                     }
                                     break;
