@@ -229,7 +229,7 @@ module.exports = (
                                     if (newState !== oldState) {
                                         if (newState === "emergency" || newState === "alarm") {
                                             sendPush({
-                                                message: `ANCHOR ${newState === "emergency" ? "ALARM" : "WARN"} ${getStatusText()}`,
+                                                message: `ANCHOR ${newState === "emergency" ? "ALARM" : "WARN"} ${getStatusText()} ${value?.message || ''}`,
                                                 priority: newState === "emergency" ? 2 : 1,
                                                 retry: 30,
                                                 expire: 600,
