@@ -4,6 +4,7 @@ const PUSHOVER_TOKEN = 'a5q57vtxjqzz56qo6gnnbmj6omyip7';
 
 const PUSHOVER_ANCHOR_TAG = 'anchor-alarm';
 const PUSHOVER_DEPTH_TAG = 'depth-alarm';
+const PUSHOVER_NO_GPS_TAG = 'nogps-alarm';
 
 /**
  * @typedef {import('@signalk/server-api').ServerAPI} ServerAPI
@@ -40,6 +41,7 @@ module.exports = (
     let anchorStatusTimeout;
     let anchorStatusInterval;
     let positionUpdateTimeout;
+    let isNoGpsAlertActive = false;
     let started = false;
 
     const getStatusText = () => {
@@ -132,7 +134,10 @@ module.exports = (
                         priority: 2,
                         retry: 30,
                         expire: 600,
-                    });
+                        tags: PUSHOVER_NO_GPS_TAG,
+                    }).then(() => {
+                        isNoGpsAlertActive = true;
+                    })
                 }, settings.no_position_alert_interval * 1000);
             }
             setPositionUpdateTimeout();
@@ -221,6 +226,11 @@ module.exports = (
 
                                 case "navigation.position":
                                     setPositionUpdateTimeout();
+                                    if (isNoGpsAlertActive) {
+                                        // We had sent a no-GPS alert before, send OK now
+                                        cancelAllEmergencyReceipts(PUSHOVER_NO_GPS_TAG).catch(() => { });
+                                        isNoGpsAlertActive = false;
+                                    }
                                     break;
 
                                 case "notifications.navigation.anchor": {
