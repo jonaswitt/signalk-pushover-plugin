@@ -190,6 +190,7 @@ module.exports = (
                 },
                 async (delta) => {
                     for (const update of delta.updates) {
+                        if (!Array.isArray(update.values)) continue;
                         for (const { path, value, ...rest } of update.values) {
                             const oldValue = getLastValue(path, undefined);
                             setLastValue(path, value);
