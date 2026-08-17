@@ -1,6 +1,6 @@
 {
   "name": "signalk-pushover-plugin",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "main": "index.js",
   "author": "Jonas Witt <mail@jonaswitt.com>",
   "license": "MIT",
